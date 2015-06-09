@@ -6,7 +6,8 @@
             $timeout,
             $document,
             tpl = '<input type="text" autofocus="{{watchProperty}}" autofocus-delay="{{delay}}" />',
-            element;
+            $element,
+            nativeSupport;
 
         beforeEach(module('autofocus'));
 
@@ -14,12 +15,9 @@
             jasmine.addMatchers({
                 toHaveFocus: function() {
                     return {
-                        compare: function(dom) {
-                            var focused;
-                            if (!(dom instanceof Node)) {
-                                dom = dom[0];
-                            }
-                            focused = dom == document.activeElement;
+                        compare: function($element) {
+                            var dom = $element[0],
+                                focused = dom == document.activeElement;
                             return {
                                 pass: focused,
                                 message: focused ? 'Expected ' + dom + ' not to have focus'
@@ -27,23 +25,71 @@
                             };
                         }
                     };
+                },
+                toHaveBeenFocused: function() {
+                    return {
+                        compare: function($element) {
+                            var dom = $element[0],
+                                focused = dom.focus.calls.any();
+                            return {
+                                pass: focused,
+                                message: focused ? 'Expected ' + dom + ' not to have been focused programatically'
+                                    : 'Expected ' + dom + ' to have been focused programatically'
+                            };
+                        }
+                    }
                 }
             });
         });
 
         beforeEach(inject(function($rootScope, _$compile_, _$timeout_, _$document_) {
+            var elementFn = angular.element;
             $scope = $rootScope.$new();
             $compile = _$compile_;
             $timeout = _$timeout_;
             $document = _$document_;
+
+            nativeSupport = false;
+            spyOn(angular, 'element').and.callFake(function() {
+                var $element = {
+                    0: {}
+                };
+                if (nativeSupport) {
+                    $element = elementFn.apply(angular, arguments);
+                }
+                angular.element = elementFn;
+                return $element;
+            })
         }));
 
         afterEach(function() {
-            element.remove();
+            $element.remove();
         });
+
+        function compile() {
+            $element = $compile(tpl)($scope);
+            spyOn($element[0], 'focus').and.callThrough();
+            angular.element($document[0].body).append($element);
+        }
+
+        function flush() {
+            $timeout.flush(($scope.delay || 0) - 1);
+            expect($element).not.toHaveBeenFocused();
+            expect($element).not.toHaveFocus();
+            $timeout.flush(1);
+        }
 
         describe('<input autofocus>', function() {
             it('should have focus immediately', onLinkTest);
+        });
+
+        describe('<input autofocus> with browser-native implementation of autofocus', function() {
+            it('should not explicitly make a call to dom.focus()', function() {
+                nativeSupport = true;
+                compile();
+                flush();
+                expect($element).not.toHaveBeenFocused();
+            });
         });
 
         describe('<input autofocus autofocus-delay="500">', function() {
@@ -56,18 +102,8 @@
         function onLinkTest() {
             compile();
             flush();
-            expect(element).toHaveFocus();
-        }
-
-        function compile() {
-            element = $compile(tpl)($scope);
-            angular.element($document[0].body).append(element);
-        }
-
-        function flush() {
-            $timeout.flush(($scope.delay || 0) - 1);
-            expect(element).not.toHaveFocus();
-            $timeout.flush(1);
+            expect($element).toHaveBeenFocused();
+            expect($element).toHaveFocus();
         }
 
         describe('<input autofocus="watchProperty">', function() {
@@ -93,7 +129,8 @@
 
         function falsyWatchTest() {
             $timeout.verifyNoPendingTasks();
-            expect(element).not.toHaveFocus();
+            expect($element).not.toHaveBeenFocused();
+            expect($element).not.toHaveFocus();
         }
 
         function truthyWatchTest() {
@@ -101,7 +138,8 @@
             $scope.autofocus = true;
             $scope.$digest();
             flush();
-            expect(element).toHaveFocus();
+            expect($element).toHaveBeenFocused();
+            expect($element).toHaveFocus();
         }
     });
 })();

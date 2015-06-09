@@ -5,13 +5,13 @@
         .directive('autofocus', Autofocus);
 
     function Autofocus($timeout) {
+        var nativeSupport = 'autofocus' in angular.element('<input>')[0];
         function link($scope, $element, $attrs) {
             var dom = $element[0];
-
             if ($attrs.autofocus) {
                 $scope.$watch($attrs.autofocus, focusIf);
             } else {
-                focusIf(true);
+                focusIf(!nativeSupport || $attrs.autofocusDelay);
             }
 
             function focusIf(condition) {
@@ -22,7 +22,6 @@
                 }
             }
         }
-
         return {
             restrict: 'A',
             link: link
